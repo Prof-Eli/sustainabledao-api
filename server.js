@@ -1,11 +1,20 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const morgan = require("morgan");
-const compression = require("compression");
-require("dotenv").config();
+# Update server.js to work even if database fails
+@'
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+require('dotenv').config();
 
-const { sequelize, testConnection } = require("./config/database");
+// Import database (but don't fail if it's not working)
+let sequelize, testConnection;
+try {
+  const db = require('./config/database');
+  sequelize = db.sequelize;
+  testConnection = db.testConnection;
+} catch (error) {
+  console.log('Database config not available:', error.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,65 +22,50 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(compression());
-app.use(morgan("dev"));
+app.use(morgan('dev'));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get("/api/v1/health", (req, res) => {
+app.get('/api/v1/health', (req, res) => {
   res.json({
-    status: "healthy",
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error:
-      process.env.NODE_ENV === "development"
-        ? err.message
-        : "Internal server error",
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+// Test route
+app.get('/api/v1/test', (req, res) => {
+  res.json({
+    message: 'API is working!',
+    database: testConnection ? 'available' : 'not configured'
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
-});
-
-// Start server with database connection check
+// Start server
 const startServer = async () => {
   try {
-    // Test database connection
-    const dbConnected = await testConnection();
-
-    if (!dbConnected) {
-      console.log("⚠️  Starting server without database connection...");
-      console.log("Fix database issues and restart for full functionality.");
+    // Test database connection if available
+    if (testConnection) {
+      const dbConnected = await testConnection();
+      if (dbConnected && sequelize) {
+        await sequelize.sync({ alter: true });
+        console.log('✅ Database synchronized');
+      }
+    } else {
+      console.log('⚠️ Starting without database connection');
     }
 
-    // Sync database models (create tables)
-    if (dbConnected) {
-      await sequelize.sync({ alter: true });
-      console.log("✅ Database synchronized");
-    }
-
-    // Start server
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📊 API Health: http://localhost:${PORT}/api/v1/health`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Health: ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}/api/v1/health`);
     });
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
 
 startServer();
+'@ | Out-File -FilePath "server.js" -Encoding UTF8

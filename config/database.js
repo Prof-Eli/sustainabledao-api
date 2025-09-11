@@ -1,23 +1,39 @@
-const { Sequelize } = require("sequelize");
+# Update your database.js file
+@'
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
 
-const sequelize = process.env.DATABASE_URL
+// Use DATABASE_URL from Render, fallback to local settings
+const sequelize = process.env.DATABASE_URL 
   ? new Sequelize(process.env.DATABASE_URL, {
-      dialect: "postgres",
-      protocol: "postgres",
-      logging: false,
       dialectOptions: {
         ssl: {
           require: true,
-          rejectUnauthorized: false,
-        },
-      },
+          rejectUnauthorized: false
+        }
+      }
     })
   : new Sequelize({
-      dialect: "postgres",
-      host: process.env.DB_HOST || "localhost",
-      database: process.env.DB_NAME,
-      username: process.env.DB_USER,
-      password: process.env.DB_PASS,
+      dialect: 'postgres',
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'sustainability_api',
+      username: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASS || 'password'
     });
 
-module.exports = { sequelize };
+// Test connection function
+const testConnection = async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ Database connection successful');
+    return true;
+  } catch (error) {
+    console.log('⚠️ Database connection failed:', error.message);
+    return false;
+  }
+};
+
+// Export both sequelize and testConnection
+module.exports = { sequelize, testConnection };
+'@ | Out-File -FilePath "config/database.js" -Encoding UTF8
