@@ -34,8 +34,13 @@ app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
+app.use(express.static("public"));
 
 // Health check
+app.get("/", (req, res) => {
+  res.send("CityTech Sustainability API is running! Visit /dashboard.html");
+});
+
 app.get("/api/v1/health", (req, res) => {
   res.json({
     status: "healthy",
