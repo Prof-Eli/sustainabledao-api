@@ -6,7 +6,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
-// Route modules (assumes these files exist and export an Express router)
+// Route modules - declare these OUTSIDE the try/catch
 const authRoutes = require("./routes/auth");
 const projectRoutes = require("./routes/projects");
 const creditRoutes = require("./routes/credits");
@@ -17,7 +17,7 @@ let testConnection;
 let dbConfigured = false;
 
 try {
-  // Assumes ./config/database exports: { sequelize, testConnection }
+  // Database connection
   const db = require("./config/database");
   sequelize = db.sequelize;
   testConnection = db.testConnection;
@@ -30,19 +30,11 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // Global middleware
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-      },
-    },
-  })
-);
+app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static("public")); // Serve dashboard.html
 
 // Health check
 app.get("/", (req, res) => {
@@ -78,6 +70,11 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/credits", creditRoutes);
 app.use("/api/admin", adminRoutes);
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
 const startServer = async () => {
   try {
     if (dbConfigured) {
@@ -86,7 +83,7 @@ const startServer = async () => {
         if (ok && sequelize && typeof sequelize.sync === "function") {
           const alter = process.env.NODE_ENV !== "production";
           await sequelize.sync({ alter });
-          console.log(`Database synchronized (alter=${alter})`);
+          console.log(`✅ Database synchronized (alter=${alter})`);
         } else {
           console.warn(
             "DB test failed or sequelize missing; continuing without sync."
@@ -103,7 +100,9 @@ const startServer = async () => {
     }
 
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
+      console.log(`🔧 Health: http://localhost:${PORT}/api/v1/health`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
@@ -113,5 +112,4 @@ const startServer = async () => {
 
 startServer();
 
-// Export app for testing
 module.exports = app;

@@ -1,7 +1,7 @@
-﻿const router = require("express").Router();
+const router = require("express").Router();
 
-router.get("/land-use", (req, res) => {
-  res.json([]);
+router.get("/leaderboard", (req, res) => {
+  res.json({ success: true, leaderboard: [] });
 });
 
 module.exports = router;
