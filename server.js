@@ -1,26 +1,41 @@
+// server.js
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-require("dotenv").config();
 
-let sequelize, testConnection;
+// Route modules (assumes these files exist and export an Express router)
+const authRoutes = require("./routes/auth");
+const projectRoutes = require("./routes/projects");
+const creditRoutes = require("./routes/credits");
+const adminRoutes = require("./routes/admin");
+
+let sequelize;
+let testConnection;
+let dbConfigured = false;
+
 try {
+  // Assumes ./config/database exports: { sequelize, testConnection }
   const db = require("./config/database");
   sequelize = db.sequelize;
   testConnection = db.testConnection;
+  dbConfigured = Boolean(sequelize) && typeof testConnection === "function";
 } catch (error) {
   console.log("Database config not available:", error.message);
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
+// Global middleware
 app.use(helmet());
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 
+// Health check
 app.get("/api/v1/health", (req, res) => {
   res.json({
     status: "healthy",
@@ -30,20 +45,45 @@ app.get("/api/v1/health", (req, res) => {
   });
 });
 
-app.get("/api/v1/test", (req, res) => {
-  res.json({
-    message: "API is working!",
-    database: testConnection ? "available" : "not configured",
-  });
+// API test + DB status
+app.get("/api/v1/test", async (req, res) => {
+  let dbStatus = "not configured";
+  if (typeof testConnection === "function") {
+    try {
+      const ok = await Promise.resolve(testConnection());
+      dbStatus = ok ? "available" : "unavailable";
+    } catch {
+      dbStatus = "unavailable";
+    }
+  }
+  res.json({ message: "API is working!", database: dbStatus });
 });
+
+// Mount routes
+app.use("/api/auth", authRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/credits", creditRoutes);
+app.use("/api/admin", adminRoutes);
 
 const startServer = async () => {
   try {
-    if (testConnection) {
-      const dbConnected = await testConnection();
-      if (dbConnected && sequelize) {
-        await sequelize.sync({ alter: true });
-        console.log("Database synchronized");
+    if (dbConfigured) {
+      try {
+        const ok = await Promise.resolve(testConnection());
+        if (ok && sequelize && typeof sequelize.sync === "function") {
+          const alter = process.env.NODE_ENV !== "production";
+          await sequelize.sync({ alter });
+          console.log(`Database synchronized (alter=${alter})`);
+        } else {
+          console.warn(
+            "DB test failed or sequelize missing; continuing without sync."
+          );
+        }
+      } catch (dbErr) {
+        console.error(
+          "Database connection failed; continuing without DB:",
+          dbErr.message
+        );
       }
     } else {
       console.log("Starting without database connection");
@@ -59,3 +99,6 @@ const startServer = async () => {
 };
 
 startServer();
+
+// Export app for testing
+module.exports = app;
