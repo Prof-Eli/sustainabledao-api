@@ -30,7 +30,15 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // Global middleware
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+      },
+    },
+  })
+);
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
